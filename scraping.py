@@ -34,5 +34,30 @@ meta = scorebox.find('div', {'class': 'scorebox_meta'}).find_all('div')
 game_summary['date'] = meta[0].text.strip()
 game_summary['start_time'] = meta[1].text[12:-6].strip()
 game_summary
-teams
+
+#Table dict
+    #Note: need to preprocess because tables appear in comments in the HTML
+    #Note: fuck baseball reference for making this so unnecessarily difficult
+uncommented_html = ''
+for h in response.text.split('\n'):
+    # if '<!--     <div' in h: h.replace('<!--     <div', '')
+    # if h.strip() == '<!--': h.replace('<!--', '')
+    # if h.strip() == '-->': h.replace('-->', '')
+    if '<!--     <div' in h: continue
+    if h.strip() == '<!--': continue
+    if h.strip() == '-->': continue
+    uncommented_html += h + '\n'
+soup = bs(uncommented_html)
+stats_tables = soup.find_all('table', {'class' : 'stats_table'})
+
+#Away Batting Table (Table 1)
+a_foot = stats_tables[1].find('tfoot')
+#TODO: update with individual player stats
+away_team_batting_stats = {x['data-stat']:x.text.strip() for x in a_foot.findAll('td')}
+
+#Home Batting Table (Table 1)
+h_foot = stats_tables[2].find('tfoot')
+#TODO: update with individual player stats
+home_team_batting_stats = {x['data-stat']:x.text.strip() for x in h_foot.findAll('td')}
+
 ##########
