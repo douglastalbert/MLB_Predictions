@@ -70,17 +70,37 @@ ap_table = stats_tables[3]
 away_pitcher_stats = []
 ap_rows = ap_table.find_all('tr')[1:-1]
 for r in ap_rows:
-        summary = {x['data-stat']:x.text.strip() for x in r.find_all('td')}
-        summary['name'] = r.find('th', {'data-stat':'player'}).find('a')['href'].split('/')[-1][:-6].strip()
-        away_pitcher_stats.append(summary)
+    summary = {x['data-stat']:x.text.strip() for x in r.find_all('td')}
+    summary['name'] = r.find('th', {'data-stat':'player'}).find('a')['href'].split('/')[-1][:-6].strip()
+    away_pitcher_stats.append(summary)
 
 #Home Individual Pitcher Table
 hp_table = stats_tables[4]
 home_pitcher_stats = []
 hp_rows = hp_table.find_all('tr')[1:-1]
 for r in hp_rows:
-        summary = {x['data-stat']:x.text.strip() for x in r.find_all('td')}
-        summary['name'] = r.find('th', {'data-stat':'player'}).find('a')['href'].split('/')[-1][:-6].strip()
-        home_pitcher_stats.append(summary)
+    summary = {x['data-stat']:x.text.strip() for x in r.find_all('td')}
+    summary['name'] = r.find('th', {'data-stat':'player'}).find('a')['href'].split('/')[-1][:-6].strip()
+    home_pitcher_stats.append(summary)
+
+#Away Individual Hitter Table
+ab_table = stats_tables[1]
+away_hitter_stats = []
+ab_rows = ab_table.find_all('tr')[1:-1]
+for r in ab_rows:
+    if '\xa0\xa0\xa0' in r.find('th').text: continue
+    summary = {x['data-stat']:x.text.strip() for x in r.find_all('td')}
+    summary['name'] = r.find('th', {'data-stat':'player'}).find('a')['href'].split('/')[-1][:-6].strip()
+    away_hitter_stats.append(summary)
+
+#Home Individual Hitter Table
+hb_table = stats_tables[2]
+home_hitter_stats = []
+hb_rows = hb_table.find_all('tr')[1:-1]
+for r in hb_rows:
+    if '\xa0\xa0\xa0' in r.find('th').text: continue
+    summary = {x['data-stat']:x.text.strip() for x in r.find_all('td')}
+    summary['name'] = r.find('th', {'data-stat':'player'}).find('a')['href'].split('/')[-1][:-6].strip()
+    home_hitter_stats.append(summary)
 
 ##########
