@@ -27,13 +27,12 @@ soup = bs(response.text)
 game_summary = {'game_id': game_id}
 scorebox = soup.find('div', {'class': 'scorebox'})
 strongs = scorebox.find_all('strong')
-game_summary['away_team_abbr'] = strongs[2]['href'].split('/')[-2]
-game_summary['home_team_abbr'] = strongs[6]['href'].split('/')[-2]
+game_summary['away_team_abbr'] = strongs[0].find('a')['href'].split('/')[-2]
+game_summary['home_team_abbr'] = strongs[1].find('a')['href'].split('/')[-2]
 meta = scorebox.find('div', {'class': 'scorebox_meta'}).find_all('div')
 #TODO: Add additional summary info for total / score forecasting
 game_summary['date'] = meta[0].text.strip()
 game_summary['start_time'] = meta[1].text[12:-6].strip()
-game_summary
 
 #Table dict
     #Note: need to preprocess because tables appear in comments in the HTML
@@ -55,9 +54,33 @@ a_foot = stats_tables[1].find('tfoot')
 #TODO: update with individual player stats
 away_team_batting_stats = {x['data-stat']:x.text.strip() for x in a_foot.findAll('td')}
 
-#Home Batting Table (Table 1)
+#Home Batting Table (Table 2)
 h_foot = stats_tables[2].find('tfoot')
 #TODO: update with individual player stats
 home_team_batting_stats = {x['data-stat']:x.text.strip() for x in h_foot.findAll('td')}
+
+#Away / Home Team Pitching Tables (Table 3/4)
+ap_foot = stats_tables[3].find('tfoot')
+away_team_pitching_stats = {x['data-stat']:x.text.strip() for x in ap_foot.findAll('td')}
+hp_foot = stats_tables[4].find('tfoot')
+home_team_pitching_stats = {x['data-stat']:x.text.strip() for x in hp_foot.findAll('td')}
+
+#Away Individual Pitcher Table
+ap_table = stats_tables[3]
+away_pitcher_stats = []
+ap_rows = ap_table.find_all('tr')[1:-1]
+for r in ap_rows:
+        summary = {x['data-stat']:x.text.strip() for x in r.find_all('td')}
+        summary['name'] = r.find('th', {'data-stat':'player'}).find('a')['href'].split('/')[-1][:-6].strip()
+        away_pitcher_stats.append(summary)
+
+#Home Individual Pitcher Table
+hp_table = stats_tables[4]
+home_pitcher_stats = []
+hp_rows = hp_table.find_all('tr')[1:-1]
+for r in hp_rows:
+        summary = {x['data-stat']:x.text.strip() for x in r.find_all('td')}
+        summary['name'] = r.find('th', {'data-stat':'player'}).find('a')['href'].split('/')[-1][:-6].strip()
+        home_pitcher_stats.append(summary)
 
 ##########
