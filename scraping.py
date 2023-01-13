@@ -13,16 +13,49 @@ soup = bs(resp.text)
 games = soup.findAll('a', text='Boxscore')
 game_links.extend([x['href'] for x in games])
 print("Number of games to download: ", len(game_links))
-game_links[0]
+game_links[639]
+
+url = 'https://www.baseball-reference.com' + game_links[0]
+
+# import random
+# ip = str(random.randint(1, 256)) + '.' + str(random.randint(1, 256)) + '.' + str(random.randint(1, 256)) + '.' + str(random.randint(1, 256)) + '.'
+# ua = 'ua' + str(random.randint(1, 20000))
+# headers={'X-Forwarded-For': ip, 'User-Agent' : ua}
+# headers
+# response = requests.get(url, headers=headers)
+
+response = requests.get(url)
+
+# response = send_request_through_tor(url)
+get_game_data(url)
+bs(response.text).prettify
+response.headers
+
+# Pull data
+import datetime as dt
+import time
+game_data_2015 = []
+len(game_data_2015)
+for link in game_links:
+    print(link)
+    time.sleep(3.2)
+    game_data_2015.append(get_game_data(link))
+    if len(game_data_2015)%1000==0: print(dt.datetime.now().time(), len(game_data))
 
 
 #Function to get all necessary data from game
     #Adapted from pdpharr process_link(url) method (also returns starting hitter stats)
 def get_game_data(extension):
+    # #Spoof IP in header
+    # import random
+    # ip = str(random.randint(1, 256)) + '.' + str(random.randint(1, 256)) + '.' + str(random.randint(1, 256)) + '.' + str(random.randint(1, 256)) + '.'
+    # headers={'X-Forwarded-For': ip}
+
 
     #TEST get data from a single games
     url = 'https://www.baseball-reference.com' + extension
     response = requests.get(url)
+    # response = send_request_through_tor(url)
     game_id = url.split('/')[-1][:-6]
     game_id
     soup = bs(response.text)
@@ -93,6 +126,10 @@ def get_game_data(extension):
         #Only add starting lineup
         if '\xa0\xa0\xa0' in r.find('th').text: continue
         summary = {x['data-stat']:x.text.strip() for x in r.find_all('td')}
+
+        #If non-hitting pitchers in box score
+        if r.find('th', {'data-stat':'player'}).find('a') is None: continue
+
         summary['name'] = r.find('th', {'data-stat':'player'}).find('a')['href'].split('/')[-1][:-6].strip()
         away_hitter_stats.append(summary)
 
@@ -104,6 +141,10 @@ def get_game_data(extension):
         #Only add starting lineup
         if '\xa0\xa0\xa0' in r.find('th').text: continue
         summary = {x['data-stat']:x.text.strip() for x in r.find_all('td')}
+
+        #If non-hitting pitchers in box score
+        if r.find('th', {'data-stat':'player'}).find('a') is None: continue
+
         summary['name'] = r.find('th', {'data-stat':'player'}).find('a')['href'].split('/')[-1][:-6].strip()
         home_hitter_stats.append(summary)
 
@@ -121,11 +162,32 @@ def get_game_data(extension):
     }
     return data
 
+
+# #Send requests through Tor
+# import stem
+# import stem.connection
+# stem.connection.connect()
+# session = requests.Session()
+# session.get('http://www.google.com')
+#
+# def send_request_through_tor(url):
+#     # Start a new Tor connection
+#     with stem.connection.connect() as conn:
+#         # Set up a new requests session
+#         session = requests.Session()
+#         # Set the HTTP proxy to the Tor server
+#         session.proxies = {'http': 'socks5://localhost:9050',
+#                            'https': 'socks5://localhost:9050'}
+#         # Send the request
+#         response = session.get(url)
+#         # Return the response
+#         return response
+
 ########################
 
 
 #TEST get data from a single games
-url = 'https://www.baseball-reference.com' + game_links[0]
+url = 'https://www.baseball-reference.com' + game_links[698]
 response = requests.get(url)
 game_id = url.split('/')[-1][:-6]
 game_id
@@ -210,3 +272,4 @@ for r in hb_rows:
     home_hitter_stats.append(summary)
 
 ##########
+home_hitter_stats
