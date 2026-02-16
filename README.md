@@ -13,6 +13,20 @@ Initial modeling vision (v0)
 - Output: a single win-probability for home/away.
 - Feature engineering: minimal—use raw season/career aggregates; defer matchup/weather/market/umpire features to later iterations if accuracy is insufficient.
 
+v0 table schemas (as-of snapshots; raw counts only, no precomputed rates required)
+- games (pk: game_id): season_year, game_date, start_time, home_team_id, away_team_id, venue_id, home_score, away_score, home_win, doubleheader_flag, game_number, source, ingested_at, home_sp_id, away_sp_id.
+- lineups (pk: game_id, team_id, batting_order): is_home, player_id, position, announced_time (if available). Pitchers appear here only if they bat; no starting-pitcher flag.
+- team_pitching_season_asof (pk: team_id, season_year, game_id): cumulative through prior game—g_played, ip, bf, h, r, er, hr, bb, ibb, hbp, so, u_bb_hbp, whip components; asof_datetime.
+- player_batting_season_asof (pk: player_id, season_year, game_id): g, pa, ab, h, 2b, 3b, hr, bb, ibb, hbp, so, sb, cs, r, rbi, sf, sh; asof_datetime.
+- player_batting_career_asof (pk: player_id, game_id): same fields as season, cumulative over career to that game.
+- player_pitching_season_asof (pk: player_id, season_year, game_id): g, gs, ip, bf, h, r, er, hr, bb, ibb, hbp, so, wp, bk; asof_datetime.
+- player_pitching_career_asof (pk: player_id, game_id): same fields as season, cumulative over career to that game.
+- dimensions: players (player_id, mlb_id, bbref_id, name_first, name_last, bats, throws, debut_date); teams (team_id, mlb_id, bbref_id, team_abbr, franchise, league, division).
+
+Schema definition format
+- Lightweight option: store table schemas in `schemas/*.yaml` (dbt-style) with column names, types, and nullability; easy to read/version and to feed into DuckDB/dbt/Great Expectations.
+- Alternatives: JSON Schema (good for nested JSON), Avro/Parquet schemas (if standardizing serialization), or SQL DDL files. For this repo, YAML is simplest and keeps the schemas close to code.
+
 Guiding principles
 - Reproducible pipelines: code-first (versioned), deterministic data builds, environment pinning.
 - Honest evaluation: out-of-sample splits by date, leakage checks, baseline comparisons.
