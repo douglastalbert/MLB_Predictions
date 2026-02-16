@@ -1,3 +1,5 @@
+import time
+import datetime as dt
 from bs4 import BeautifulSoup as bs
 import requests
 
@@ -15,7 +17,7 @@ game_links.extend([x['href'] for x in games])
 print("Number of games to download: ", len(game_links))
 game_links[639]
 
-url = 'https://www.baseball-reference.com' + game_links[0]
+url = 'https://www.baseball-reference.com' + game_links[639]
 
 # import random
 # ip = str(random.randint(1, 256)) + '.' + str(random.randint(1, 256)) + '.' + str(random.randint(1, 256)) + '.' + str(random.randint(1, 256)) + '.'
@@ -30,17 +32,23 @@ response = requests.get(url)
 get_game_data(url)
 bs(response.text).prettify
 response.headers
-
 # Pull data
-import datetime as dt
-import time
-game_data_2015 = []
+# game_data_2015 = []
 len(game_data_2015)
-for link in game_links:
+
+
+for i in range(len(game_data_2015), len(game_links)):
+    link = game_links[i]
     print(link)
     time.sleep(3.2)
     game_data_2015.append(get_game_data(link))
-    if len(game_data_2015)%1000==0: print(dt.datetime.now().time(), len(game_data))
+    if len(game_data_2015) % 1000 == 0:
+        print(dt.datetime.now().time(), len(game_data))
+# for link in game_links:
+#     print(link)
+#     time.sleep(3.2)
+#     game_data_2015.append(get_game_data(link))
+#     if len(game_data_2015)%1000==0: print(dt.datetime.now().time(), len(game_data))
 
 
 #Function to get all necessary data from game
@@ -50,7 +58,6 @@ def get_game_data(extension):
     # import random
     # ip = str(random.randint(1, 256)) + '.' + str(random.randint(1, 256)) + '.' + str(random.randint(1, 256)) + '.' + str(random.randint(1, 256)) + '.'
     # headers={'X-Forwarded-For': ip}
-
 
     #TEST get data from a single games
     url = 'https://www.baseball-reference.com' + extension
@@ -64,49 +71,59 @@ def get_game_data(extension):
     game_summary = {'game_id': game_id}
     scorebox = soup.find('div', {'class': 'scorebox'})
     strongs = scorebox.find_all('strong')
-    game_summary['away_team_abbr'] = strongs[0].find('a')['href'].split('/')[-2]
-    game_summary['home_team_abbr'] = strongs[1].find('a')['href'].split('/')[-2]
+    game_summary['away_team_abbr'] = strongs[0].find('a')[
+                                                     'href'].split('/')[-2]
+    game_summary['home_team_abbr'] = strongs[1].find('a')[
+                                                     'href'].split('/')[-2]
     meta = scorebox.find('div', {'class': 'scorebox_meta'}).find_all('div')
     #TODO: Add additional summary info for total / score forecasting
     game_summary['date'] = meta[0].text.strip()
     game_summary['start_time'] = meta[1].text[12:-6].strip()
 
     #Table dict
-        #Note: need to preprocess because tables appear in comments in the HTML
-        #Note: fuck baseball reference for making this so unnecessarily difficult
+    #Note: need to preprocess because tables appear in comments in the HTML
+    #Note: fuck baseball reference for making this so unnecessarily difficult
     uncommented_html = ''
     for h in response.text.split('\n'):
         # if '<!--     <div' in h: h.replace('<!--     <div', '')
         # if h.strip() == '<!--': h.replace('<!--', '')
         # if h.strip() == '-->': h.replace('-->', '')
-        if '<!--     <div' in h: continue
-        if h.strip() == '<!--': continue
-        if h.strip() == '-->': continue
+        if '<!--     <div' in h:
+            continue
+        if h.strip() == '<!--':
+            continue
+        if h.strip() == '-->':
+            continue
         uncommented_html += h + '\n'
     soup = bs(uncommented_html)
-    stats_tables = soup.find_all('table', {'class' : 'stats_table'})
+    stats_tables = soup.find_all('table', {'class': 'stats_table'})
 
     #Away Batting Table (Table 1)
     a_foot = stats_tables[1].find('tfoot')
-    away_team_batting_stats = {x['data-stat']:x.text.strip() for x in a_foot.findAll('td')}
+    away_team_batting_stats = {x['data-stat']
+        : x.text.strip() for x in a_foot.findAll('td')}
 
     #Home Batting Table (Table 2)
     h_foot = stats_tables[2].find('tfoot')
-    home_team_batting_stats = {x['data-stat']:x.text.strip() for x in h_foot.findAll('td')}
+    home_team_batting_stats = {x['data-stat']
+        : x.text.strip() for x in h_foot.findAll('td')}
 
     #Away / Home Team Pitching Tables (Table 3/4)
     ap_foot = stats_tables[3].find('tfoot')
-    away_team_pitching_stats = {x['data-stat']:x.text.strip() for x in ap_foot.findAll('td')}
+    away_team_pitching_stats = {
+        x['data-stat']: x.text.strip() for x in ap_foot.findAll('td')}
     hp_foot = stats_tables[4].find('tfoot')
-    home_team_pitching_stats = {x['data-stat']:x.text.strip() for x in hp_foot.findAll('td')}
+    home_team_pitching_stats = {
+        x['data-stat']: x.text.strip() for x in hp_foot.findAll('td')}
 
     #Away Individual Pitcher Table
     ap_table = stats_tables[3]
     away_pitcher_stats = []
     ap_rows = ap_table.find_all('tr')[1:-1]
     for r in ap_rows:
-        summary = {x['data-stat']:x.text.strip() for x in r.find_all('td')}
-        summary['name'] = r.find('th', {'data-stat':'player'}).find('a')['href'].split('/')[-1][:-6].strip()
+        summary = {x['data-stat']: x.text.strip() for x in r.find_all('td')}
+        summary['name'] = r.find(
+            'th', {'data-stat': 'player'}).find('a')['href'].split('/')[-1][:-6].strip()
         away_pitcher_stats.append(summary)
 
     #Home Individual Pitcher Table
@@ -114,8 +131,9 @@ def get_game_data(extension):
     home_pitcher_stats = []
     hp_rows = hp_table.find_all('tr')[1:-1]
     for r in hp_rows:
-        summary = {x['data-stat']:x.text.strip() for x in r.find_all('td')}
-        summary['name'] = r.find('th', {'data-stat':'player'}).find('a')['href'].split('/')[-1][:-6].strip()
+        summary = {x['data-stat']: x.text.strip() for x in r.find_all('td')}
+        summary['name'] = r.find(
+            'th', {'data-stat': 'player'}).find('a')['href'].split('/')[-1][:-6].strip()
         home_pitcher_stats.append(summary)
 
     #Away Individual Hitter Table
@@ -124,13 +142,16 @@ def get_game_data(extension):
     ab_rows = ab_table.find_all('tr')[1:-1]
     for r in ab_rows:
         #Only add starting lineup
-        if '\xa0\xa0\xa0' in r.find('th').text: continue
-        summary = {x['data-stat']:x.text.strip() for x in r.find_all('td')}
+        if '\xa0\xa0\xa0' in r.find('th').text:
+            continue
+        summary = {x['data-stat']: x.text.strip() for x in r.find_all('td')}
 
         #If non-hitting pitchers in box score
-        if r.find('th', {'data-stat':'player'}).find('a') is None: continue
+        if r.find('th', {'data-stat': 'player'}).find('a') is None:
+            continue
 
-        summary['name'] = r.find('th', {'data-stat':'player'}).find('a')['href'].split('/')[-1][:-6].strip()
+        summary['name'] = r.find(
+            'th', {'data-stat': 'player'}).find('a')['href'].split('/')[-1][:-6].strip()
         away_hitter_stats.append(summary)
 
     #Home Individual Hitter Table
@@ -139,26 +160,29 @@ def get_game_data(extension):
     hb_rows = hb_table.find_all('tr')[1:-1]
     for r in hb_rows:
         #Only add starting lineup
-        if '\xa0\xa0\xa0' in r.find('th').text: continue
-        summary = {x['data-stat']:x.text.strip() for x in r.find_all('td')}
+        if '\xa0\xa0\xa0' in r.find('th').text:
+            continue
+        summary = {x['data-stat']: x.text.strip() for x in r.find_all('td')}
 
         #If non-hitting pitchers in box score
-        if r.find('th', {'data-stat':'player'}).find('a') is None: continue
+        if r.find('th', {'data-stat': 'player'}).find('a') is None:
+            continue
 
-        summary['name'] = r.find('th', {'data-stat':'player'}).find('a')['href'].split('/')[-1][:-6].strip()
+        summary['name'] = r.find(
+            'th', {'data-stat': 'player'}).find('a')['href'].split('/')[-1][:-6].strip()
         home_hitter_stats.append(summary)
 
     data = {
-        'game' : game_summary,
-        'away_batting' : away_team_batting_stats,
-        'home_batting' : home_team_batting_stats,
-        'away_pitching' : away_team_pitching_stats,
-        'home_pitching' : home_team_pitching_stats,
-        'away_pitchers' : away_pitcher_stats,
-        'home_pitchers' : home_pitcher_stats,
+        'game': game_summary,
+        'away_batting': away_team_batting_stats,
+        'home_batting': home_team_batting_stats,
+        'away_pitching': away_team_pitching_stats,
+        'home_pitching': home_team_pitching_stats,
+        'away_pitchers': away_pitcher_stats,
+        'home_pitchers': home_pitcher_stats,
         #Delta from rdpharr process_link(url) return value below
-        'away_hitters' : away_hitter_stats,
-        'home_hitters' : home_hitter_stats
+        'away_hitters': away_hitter_stats,
+        'home_hitters': home_hitter_stats
     }
     return data
 
@@ -205,41 +229,49 @@ game_summary['date'] = meta[0].text.strip()
 game_summary['start_time'] = meta[1].text[12:-6].strip()
 
 #Table dict
-    #Note: need to preprocess because tables appear in comments in the HTML
-    #Note: fuck baseball reference for making this so unnecessarily difficult
+#Note: need to preprocess because tables appear in comments in the HTML
+#Note: fuck baseball reference for making this so unnecessarily difficult
 uncommented_html = ''
 for h in response.text.split('\n'):
     # if '<!--     <div' in h: h.replace('<!--     <div', '')
     # if h.strip() == '<!--': h.replace('<!--', '')
     # if h.strip() == '-->': h.replace('-->', '')
-    if '<!--     <div' in h: continue
-    if h.strip() == '<!--': continue
-    if h.strip() == '-->': continue
+    if '<!--     <div' in h:
+        continue
+    if h.strip() == '<!--':
+        continue
+    if h.strip() == '-->':
+        continue
     uncommented_html += h + '\n'
 soup = bs(uncommented_html)
-stats_tables = soup.find_all('table', {'class' : 'stats_table'})
+stats_tables = soup.find_all('table', {'class': 'stats_table'})
 
 #Away Batting Table (Table 1)
 a_foot = stats_tables[1].find('tfoot')
-away_team_batting_stats = {x['data-stat']:x.text.strip() for x in a_foot.findAll('td')}
+away_team_batting_stats = {x['data-stat']: x.text.strip()
+                           for x in a_foot.findAll('td')}
 
 #Home Batting Table (Table 2)
 h_foot = stats_tables[2].find('tfoot')
-home_team_batting_stats = {x['data-stat']:x.text.strip() for x in h_foot.findAll('td')}
+home_team_batting_stats = {x['data-stat']: x.text.strip()
+                           for x in h_foot.findAll('td')}
 
 #Away / Home Team Pitching Tables (Table 3/4)
 ap_foot = stats_tables[3].find('tfoot')
-away_team_pitching_stats = {x['data-stat']:x.text.strip() for x in ap_foot.findAll('td')}
+away_team_pitching_stats = {x['data-stat']
+    : x.text.strip() for x in ap_foot.findAll('td')}
 hp_foot = stats_tables[4].find('tfoot')
-home_team_pitching_stats = {x['data-stat']:x.text.strip() for x in hp_foot.findAll('td')}
+home_team_pitching_stats = {x['data-stat']
+    : x.text.strip() for x in hp_foot.findAll('td')}
 
 #Away Individual Pitcher Table
 ap_table = stats_tables[3]
 away_pitcher_stats = []
 ap_rows = ap_table.find_all('tr')[1:-1]
 for r in ap_rows:
-    summary = {x['data-stat']:x.text.strip() for x in r.find_all('td')}
-    summary['name'] = r.find('th', {'data-stat':'player'}).find('a')['href'].split('/')[-1][:-6].strip()
+    summary = {x['data-stat']: x.text.strip() for x in r.find_all('td')}
+    summary['name'] = r.find(
+        'th', {'data-stat': 'player'}).find('a')['href'].split('/')[-1][:-6].strip()
     away_pitcher_stats.append(summary)
 
 #Home Individual Pitcher Table
@@ -247,8 +279,9 @@ hp_table = stats_tables[4]
 home_pitcher_stats = []
 hp_rows = hp_table.find_all('tr')[1:-1]
 for r in hp_rows:
-    summary = {x['data-stat']:x.text.strip() for x in r.find_all('td')}
-    summary['name'] = r.find('th', {'data-stat':'player'}).find('a')['href'].split('/')[-1][:-6].strip()
+    summary = {x['data-stat']: x.text.strip() for x in r.find_all('td')}
+    summary['name'] = r.find(
+        'th', {'data-stat': 'player'}).find('a')['href'].split('/')[-1][:-6].strip()
     home_pitcher_stats.append(summary)
 
 #Away Individual Hitter Table
@@ -256,9 +289,11 @@ ab_table = stats_tables[1]
 away_hitter_stats = []
 ab_rows = ab_table.find_all('tr')[1:-1]
 for r in ab_rows:
-    if '\xa0\xa0\xa0' in r.find('th').text: continue
-    summary = {x['data-stat']:x.text.strip() for x in r.find_all('td')}
-    summary['name'] = r.find('th', {'data-stat':'player'}).find('a')['href'].split('/')[-1][:-6].strip()
+    if '\xa0\xa0\xa0' in r.find('th').text:
+        continue
+    summary = {x['data-stat']: x.text.strip() for x in r.find_all('td')}
+    summary['name'] = r.find(
+        'th', {'data-stat': 'player'}).find('a')['href'].split('/')[-1][:-6].strip()
     away_hitter_stats.append(summary)
 
 #Home Individual Hitter Table
@@ -266,10 +301,11 @@ hb_table = stats_tables[2]
 home_hitter_stats = []
 hb_rows = hb_table.find_all('tr')[1:-1]
 for r in hb_rows:
-    if '\xa0\xa0\xa0' in r.find('th').text: continue
-    summary = {x['data-stat']:x.text.strip() for x in r.find_all('td')}
-    summary['name'] = r.find('th', {'data-stat':'player'}).find('a')['href'].split('/')[-1][:-6].strip()
+    if '\xa0\xa0\xa0' in r.find('th').text:
+        continue
+    summary = {x['data-stat']: x.text.strip() for x in r.find_all('td')}
+    summary['name'] = r.find(
+        'th', {'data-stat': 'player'}).find('a')['href'].split('/')[-1][:-6].strip()
     home_hitter_stats.append(summary)
 
 ##########
-home_hitter_stats
