@@ -26,6 +26,7 @@ v0 table schemas (as-of snapshots; raw counts only, no precomputed rates require
 Schema definition format
 - Lightweight option: store table schemas in `schemas/*.yaml` (dbt-style) with column names, types, and nullability; easy to read/version and to feed into DuckDB/dbt/Great Expectations.
 - Alternatives: JSON Schema (good for nested JSON), Avro/Parquet schemas (if standardizing serialization), or SQL DDL files. For this repo, YAML is simplest and keeps the schemas close to code.
+- Career completeness: career_asof tables must include stats from player debut onward; when debut < 2005, seed pre-2005 counts (or ingest those seasons) so career aggregates are not truncated.
 
 Guiding principles
 - Reproducible pipelines: code-first (versioned), deterministic data builds, environment pinning.
@@ -40,6 +41,7 @@ Roadmap
 
 1) Data acquisition
    - Sources (v0): Baseball-Reference box scores and play-by-play for historical games; roster/lineup data to capture starting hitters and pitchers with batting order; season-to-date and career aggregates per player and team pitching.
+   - Season coverage: 2005–present for game-level data; handle players who debuted pre-2005 by backfilling their earlier seasons (ingest pre-2005 box scores where available or seed career-to-2004 totals from Baseball-Reference career pages).
    - Scrapers as idempotent CLI jobs (no notebooks): retry w/ backoff, polite rate limiting, caching (requests-cache), checksum-based dedup; store raw HTML/JSON snapshots for audit.
    - Normalize output to columnar files (Parquet) stored per table/date/season partition.
 
@@ -76,4 +78,13 @@ Current notebook output (scraping.ipynb) — viability & improvements
 - Improvements (short term): refactor scraper into a module/CLI (`python -m pipelines.scrape_boxscores --season 2015 --out data/raw/boxscores/season=2015/part-*.parquet`); normalize to tables required for v0 (games, lineups with batting order, player season/career batting and pitching, team season pitching) with typed columns; write Parquet + schema metadata; add retry/backoff and request headers; persist raw HTML for audit.
 - Improvements (next): build as-of aggregate transforms in dbt/duckdb; add validations (row counts per season, null checks, unique game_id); log scrape run metadata (started/ended, failures, skipped); add guardrails that forbid using stats dated after the game start; expand to newer seasons; keep future features (weather, market odds, context) as optional add-ons once v0 accuracy plateaus.
 
-Next step to tackle: convert the notebook scraping code into a reproducible CLI that outputs partitioned Parquet tables for 2015–present, then build validation checks and a small exploratory backtest baseline.
+Scraper plan (2005–present, pre-2005 career-complete)
+- CLI: `python -m pipelines.scrape_boxscores --season 2010 --out data/raw/boxscores/season=2010 --cache-html --resume` (season range flag also acceptable). In production runs, process the full season; any `--max-games` limiter is only for local debugging and must be omitted to guarantee completeness.
+- Flow: fetch schedule → collect boxscore URLs → fetch HTML (polite headers, retries, 3–4s jittered delay) → parse to tidy tables (games, lineups, player batting/pitching game lines) → write Parquet partitions (`data/raw/{table}/season=YYYY/part-*.parquet`) with schema enforcement → save raw HTML to `data/raw/html/season=YYYY/game_id=.html` for audit.
+- IDs: use Baseball-Reference game_id/player_id/team_abbr as canonical; store `home_sp_id/away_sp_id` in games; batting order in lineups.
+- As-of aggregation job (post-scrape): in DuckDB/pandas, sort games by start_time (and game_number for doubleheaders), cumulative sums excluding current game to produce season_asof and career_asof tables; `asof_datetime` = game start.
+- Pre-2005 career seeding: for players with debut < 2005, pull career totals through 2004 from BRef career pages (one-time job) and store as a seed table that is added to cumulative sums so career_asof isn’t truncated.
+- Validation: enforce schema from `schemas/*.yaml`, unique PKs, row-count checks per season, and layout-drift alerts when parser mismatches.
+- Idempotency: skip already-downloaded game_ids unless `--force`; cache HTML; checksum files to detect changes.
+
+Next step to tackle: scaffold the `pipelines/` package and CLI stub, add `schemas/` YAMLs, and implement schedule + single-boxscore parsing for one season slice (e.g., 2010) as a proof of concept.
