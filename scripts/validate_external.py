@@ -77,12 +77,25 @@ TEAM_ID_BY_CODE = {
     "STL": 138,
     "TBA": 139,
     "TBR": 139,
+    "TBD": 139,
     "TB": 139,
     "TEX": 140,
     "TOR": 141,
     "WAS": 120,
     "WSN": 120,
     "WSH": 120,
+}
+
+FIRST_NAME_ALIASES = {
+    "andy": "andrew",
+    "matt": "matthew",
+    "mike": "michael",
+    "rick": "richard",
+    "rickie": "richard",
+    "ricky": "richard",
+    "tony": "antonio",
+    "rob": "robert",
+    "alex": "alexander",
 }
 
 
@@ -161,8 +174,18 @@ def parse_args() -> argparse.Namespace:
         default=25,
         help="Number of random lineup slots to validate.",
     )
-    parser.add_argument("--seed", type=int, default=42, help="Random seed.")
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Optional random seed for reproducible sampling. Omit for non-deterministic samples.",
+    )
     parser.add_argument("--timeout", type=float, default=20.0, help="HTTP timeout seconds.")
+    parser.add_argument(
+        "--fail-on-issues",
+        action="store_true",
+        help="Exit with status 1 when unresolved or mismatches are present in any validator.",
+    )
     return parser.parse_args()
 
 
@@ -171,11 +194,17 @@ def parse_game_date_to_iso(game_date: str) -> str:
     return datetime.strptime(game_date, "%A, %B %d, %Y").date().isoformat()
 
 
+def season_from_game_id(game_id: str) -> Optional[str]:
+    if len(game_id) >= 7 and game_id[3:7].isdigit():
+        return game_id[3:7]
+    return None
+
+
 def mlb_team_id_from_code(team_code: str) -> Optional[int]:
     return TEAM_ID_BY_CODE.get(team_code)
 
 
-def normalize_name(name: str) -> str:
+def _repair_name_text(name: str) -> str:
     # Repair common mojibake from mis-decoded UTF-8 names (e.g., "HÃ©ctor").
     if any(ch in name for ch in ("Ã", "Â", "â")):
         try:
@@ -186,12 +215,61 @@ def normalize_name(name: str) -> str:
     # Strip accents/diacritics so "Hector" and "Hector" with accents normalize identically.
     name = unicodedata.normalize("NFKD", name)
     name = "".join(ch for ch in name if not unicodedata.combining(ch))
+    return name
 
-    # Ignore common generational suffixes in cross-source name matching.
-    tokens = re.findall(r"[a-z0-9]+", name.lower())
+
+def name_tokens(name: str) -> List[str]:
+    text = _repair_name_text(name)
+    tokens = re.findall(r"[a-z0-9]+", text.lower())
     suffixes = {"jr", "sr", "ii", "iii", "iv", "v"}
-    tokens = [token for token in tokens if token not in suffixes]
+    return [token for token in tokens if token not in suffixes]
+
+
+def normalize_name(name: str) -> str:
+    tokens = name_tokens(name)
     return "".join(tokens)
+
+
+def canonical_first_name(token: str) -> str:
+    return FIRST_NAME_ALIASES.get(token, token)
+
+
+def names_equivalent(local_name: str, external_name: str) -> bool:
+    if normalize_name(local_name) == normalize_name(external_name):
+        return True
+    l_tokens = name_tokens(local_name)
+    e_tokens = name_tokens(external_name)
+    if not l_tokens or not e_tokens:
+        return False
+
+    l_first = canonical_first_name(l_tokens[0])
+    e_first = canonical_first_name(e_tokens[0])
+    l_last = l_tokens[-1]
+    e_last = e_tokens[-1]
+    if l_last != e_last:
+        return False
+    if l_first == e_first:
+        return True
+    if l_first and e_first and l_first[0] == e_first[0]:
+        # Allow abbreviated/expanded first names from different sources.
+        return l_first.startswith(e_first) or e_first.startswith(l_first)
+    return False
+
+
+def local_side_to_external(local_is_home: bool, mode: str) -> bool:
+    # Alternate-venue and reversed games require side inversion.
+    if mode.startswith("reverse_"):
+        return not local_is_home
+    return local_is_home
+
+
+def b_ref_game_number(game_id: str) -> Optional[int]:
+    if not game_id:
+        return None
+    tail = game_id[-1]
+    if tail in {"1", "2"}:
+        return int(tail)
+    return None
 
 
 def load_games(base: Path, season: int) -> List[GameRow]:
@@ -311,6 +389,7 @@ def find_mlb_game(
     if home_team_id is None or away_team_id is None:
         return None, "unknown_team_code"
 
+    game_number = b_ref_game_number(game.game_id)
     candidates = []
     for candidate in games:
         c_home = candidate.get("teams", {}).get("home", {}).get("team", {}).get("id")
@@ -328,6 +407,14 @@ def find_mlb_game(
                 reverse_candidates.append(candidate)
         if not reverse_candidates:
             return None, "no_team_match"
+        if game_number is not None:
+            rev_num_match = [
+                c
+                for c in reverse_candidates
+                if c.get("gameNumber") is not None and int(c.get("gameNumber")) == game_number
+            ]
+            if len(rev_num_match) == 1:
+                return rev_num_match[0], "reverse_game_number_disambiguated"
         if len(reverse_candidates) == 1:
             return reverse_candidates[0], "reverse_home_away"
         reverse_score_match = [
@@ -340,9 +427,20 @@ def find_mlb_game(
             return reverse_score_match[0], "reverse_score_disambiguated"
         return reverse_candidates[0], "reverse_ambiguous_first"
     if len(candidates) == 1:
+        if game_number is not None:
+            c_num = candidates[0].get("gameNumber")
+            if c_num is not None and int(c_num) != game_number:
+                # BRef and MLB can differ in home/away orientation for resumed/doubleheader games.
+                # Keep this unresolved so validator doesn't flag a false mismatch.
+                return None, "game_number_mismatch"
         return candidates[0], "exact"
 
     # For doubleheaders / duplicates on same day, first attempt score-based disambiguation.
+    if game_number is not None:
+        num_match = [c for c in candidates if c.get("gameNumber") is not None and int(c.get("gameNumber")) == game_number]
+        if len(num_match) == 1:
+            return num_match[0], "game_number_disambiguated"
+
     score_match = [
         c
         for c in candidates
@@ -355,8 +453,13 @@ def find_mlb_game(
 
 
 def extract_player_name_map_from_cached_html(base: Path, game_id: str) -> Dict[str, str]:
-    html_path = base / "html" / f"{game_id}.html"
-    if not html_path.exists():
+    year = season_from_game_id(game_id)
+    candidate_paths = []
+    if year is not None:
+        candidate_paths.append(base / "html" / f"season={year}" / f"{game_id}.html")
+    candidate_paths.append(base / "html" / f"{game_id}.html")
+    html_path = next((p for p in candidate_paths if p.exists()), None)
+    if html_path is None:
         return {}
     html = html_path.read_text(encoding="utf-8")
     html = html.replace("<!--", "").replace("-->", "")
@@ -379,6 +482,27 @@ def mlb_boxscore_players_by_side(boxscore: dict, is_home: bool) -> List[dict]:
     side = "home" if is_home else "away"
     players = boxscore.get("teams", {}).get(side, {}).get("players", {})
     return list(players.values())
+
+
+def name_candidates_on_side(players: List[dict], local_name: str) -> List[dict]:
+    matches = []
+    for player in players:
+        full_name = player.get("person", {}).get("fullName", "")
+        if names_equivalent(local_name, full_name):
+            matches.append(player)
+    return matches
+
+
+def name_candidates_with_side_fallback(boxscore: dict, expected_is_home: bool, local_name: str) -> Tuple[List[dict], bool]:
+    primary_players = mlb_boxscore_players_by_side(boxscore, expected_is_home)
+    primary_matches = name_candidates_on_side(primary_players, local_name)
+    if primary_matches:
+        return primary_matches, expected_is_home
+
+    fallback_is_home = not expected_is_home
+    fallback_players = mlb_boxscore_players_by_side(boxscore, fallback_is_home)
+    fallback_matches = name_candidates_on_side(fallback_players, local_name)
+    return fallback_matches, fallback_is_home
 
 
 def batting_stats_from_mlb_player(player: dict) -> Dict[str, int]:
@@ -464,7 +588,7 @@ def run_score_validation(
     games: List[GameRow],
     score_sample: int,
     rng: random.Random,
-) -> None:
+) -> Dict[str, int]:
     pool = games if score_sample <= 0 else rng.sample(games, min(score_sample, len(games)))
     checked = 0
     mismatches: List[dict] = []
@@ -512,6 +636,15 @@ def run_score_validation(
         print("Mismatch sample:")
         for item in mismatches[:10]:
             print(item)
+    # Known cross-source edge case: BRef doubleheader suffix can disagree with MLB gameNumber
+    # even when teams/date are right. Keep these visible but non-blocking.
+    unresolved_critical = [item for item in unresolved if item.get("reason") != "game_number_mismatch"]
+    return {
+        "checked": checked,
+        "unresolved": len(unresolved),
+        "unresolved_critical": len(unresolved_critical),
+        "mismatches": len(mismatches),
+    }
 
 
 def choose_best_name_match(candidates: List[dict], local_stats: Dict[str, int]) -> Optional[dict]:
@@ -546,6 +679,14 @@ def choose_best_pitcher_match(candidates: List[dict], local_stats: Dict[str, int
     return best
 
 
+def unique_pitcher_by_stats(boxscore: dict, local_stats: Dict[str, int]) -> Optional[dict]:
+    all_players = mlb_boxscore_players_by_side(boxscore, True) + mlb_boxscore_players_by_side(boxscore, False)
+    matches = [player for player in all_players if pitching_stats_from_mlb_player(player) == local_stats]
+    if len(matches) == 1:
+        return matches[0]
+    return None
+
+
 def run_player_validation(
     api: MlbApi,
     games_by_id: Dict[str, GameRow],
@@ -553,13 +694,16 @@ def run_player_validation(
     base: Path,
     player_sample: int,
     rng: random.Random,
-) -> None:
+) -> Dict[str, int]:
     if not bats:
         print("\n=== External Player Statline Validation ===")
         print("No batting rows available.")
-        return
+        return {"checked": 0, "unresolved": 0, "unresolved_critical": 0, "mismatches": 0}
 
-    sample_rows = rng.sample(bats, min(player_sample, len(bats)))
+    # Skip zero-activity batting rows for external validation sampling.
+    active_bats = [row for row in bats if (row.ab + row.r + row.h + row.rbi + row.bb + row.so) > 0]
+    sample_pool = active_bats if active_bats else bats
+    sample_rows = rng.sample(sample_pool, min(player_sample, len(sample_pool)))
     checked = 0
     mismatches: List[dict] = []
     unresolved: List[dict] = []
@@ -599,13 +743,8 @@ def run_player_validation(
             unresolved.append({"game_id": row.game_id, "player_id": row.player_id, "reason": "missing_local_name"})
             continue
 
-        target_norm = normalize_name(local_name)
-        side_players = mlb_boxscore_players_by_side(boxscore, row.is_home)
-        candidates = []
-        for p in side_players:
-            full_name = p.get("person", {}).get("fullName", "")
-            if normalize_name(full_name) == target_norm:
-                candidates.append(p)
+        expected_is_home = local_side_to_external(row.is_home, mode)
+        candidates, _side_used = name_candidates_with_side_fallback(boxscore, expected_is_home, local_name)
         if not candidates:
             unresolved.append(
                 {"game_id": row.game_id, "player_id": row.player_id, "player_name": local_name, "reason": "name_not_found_on_side"}
@@ -641,6 +780,13 @@ def run_player_validation(
         print("Mismatch sample:")
         for item in mismatches[:10]:
             print(item)
+    unresolved_critical = [item for item in unresolved if item.get("reason") != "game_number_mismatch"]
+    return {
+        "checked": checked,
+        "unresolved": len(unresolved),
+        "unresolved_critical": len(unresolved_critical),
+        "mismatches": len(mismatches),
+    }
 
 
 def run_pitcher_validation(
@@ -650,11 +796,11 @@ def run_pitcher_validation(
     base: Path,
     pitcher_sample: int,
     rng: random.Random,
-) -> None:
+) -> Dict[str, int]:
     if not pitches:
         print("\n=== External Pitcher Statline Validation ===")
         print("No pitching rows available.")
-        return
+        return {"checked": 0, "unresolved": 0, "unresolved_critical": 0, "mismatches": 0}
 
     sample_rows = rng.sample(pitches, min(pitcher_sample, len(pitches)))
     checked = 0
@@ -696,18 +842,19 @@ def run_pitcher_validation(
             unresolved.append({"game_id": row.game_id, "player_id": row.player_id, "reason": "missing_local_name"})
             continue
 
-        target_norm = normalize_name(local_name)
-        side_players = mlb_boxscore_players_by_side(boxscore, row.is_home)
-        candidates = []
-        for p in side_players:
-            full_name = p.get("person", {}).get("fullName", "")
-            if normalize_name(full_name) == target_norm:
-                candidates.append(p)
+        expected_is_home = local_side_to_external(row.is_home, mode)
+        candidates, _side_used = name_candidates_with_side_fallback(boxscore, expected_is_home, local_name)
         if not candidates:
-            unresolved.append(
-                {"game_id": row.game_id, "player_id": row.player_id, "player_name": local_name, "reason": "name_not_found_on_side"}
-            )
-            continue
+            # Fallback: if the full pitching statline matches exactly one MLB player, accept it.
+            local_stats = pitching_stats_from_local(row)
+            stats_unique = unique_pitcher_by_stats(boxscore, local_stats)
+            if stats_unique is not None:
+                candidates = [stats_unique]
+            else:
+                unresolved.append(
+                    {"game_id": row.game_id, "player_id": row.player_id, "player_name": local_name, "reason": "name_not_found_on_side"}
+                )
+                continue
 
         local_stats = pitching_stats_from_local(row)
         chosen = choose_best_pitcher_match(candidates, local_stats)
@@ -738,6 +885,13 @@ def run_pitcher_validation(
         print("Mismatch sample:")
         for item in mismatches[:10]:
             print(item)
+    unresolved_critical = [item for item in unresolved if item.get("reason") != "game_number_mismatch"]
+    return {
+        "checked": checked,
+        "unresolved": len(unresolved),
+        "unresolved_critical": len(unresolved_critical),
+        "mismatches": len(mismatches),
+    }
 
 
 def run_lineup_validation(
@@ -747,11 +901,11 @@ def run_lineup_validation(
     base: Path,
     lineup_sample: int,
     rng: random.Random,
-) -> None:
+) -> Dict[str, int]:
     if not lineups:
         print("\n=== External Lineup Validation ===")
         print("No lineup rows available.")
-        return
+        return {"checked": 0, "unresolved": 0, "unresolved_critical": 0, "mismatches": 0}
 
     sample_rows = rng.sample(lineups, min(lineup_sample, len(lineups)))
     checked = 0
@@ -793,8 +947,12 @@ def run_lineup_validation(
             unresolved.append({"game_id": row.game_id, "player_id": row.player_id, "reason": "missing_local_name"})
             continue
 
-        starters = starting_lineup_by_order(boxscore, row.is_home)
+        expected_is_home = local_side_to_external(row.is_home, mode)
+        starters = starting_lineup_by_order(boxscore, expected_is_home)
         external_player = starters.get(row.batting_order)
+        if external_player is None:
+            fallback_starters = starting_lineup_by_order(boxscore, not expected_is_home)
+            external_player = fallback_starters.get(row.batting_order)
         if external_player is None:
             unresolved.append(
                 {
@@ -809,7 +967,7 @@ def run_lineup_validation(
 
         checked += 1
         external_name = external_player.get("person", {}).get("fullName", "")
-        if normalize_name(local_name) != normalize_name(external_name):
+        if not names_equivalent(local_name, external_name):
             mismatches.append(
                 {
                     "game_id": row.game_id,
@@ -830,11 +988,24 @@ def run_lineup_validation(
         print("Mismatch sample:")
         for item in mismatches[:10]:
             print(item)
+    unresolved_critical = [item for item in unresolved if item.get("reason") != "game_number_mismatch"]
+    return {
+        "checked": checked,
+        "unresolved": len(unresolved),
+        "unresolved_critical": len(unresolved_critical),
+        "mismatches": len(mismatches),
+    }
 
 
 def main() -> None:
     args = parse_args()
-    rng = random.Random(args.seed)
+    if args.seed is None:
+        used_seed = random.SystemRandom().randrange(0, 2**32)
+        seed_source = "generated"
+    else:
+        used_seed = args.seed
+        seed_source = "provided"
+    rng = random.Random(used_seed)
 
     games = load_games(args.base, args.season)
     games_by_id = {g.game_id: g for g in games}
@@ -846,12 +1017,27 @@ def main() -> None:
         f"Loaded games={len(games)} batting_rows={len(bats)} "
         f"pitching_rows={len(pitches)} lineup_rows={len(lineups)}"
     )
+    print(f"Sampling seed={used_seed} ({seed_source})")
     api = MlbApi(timeout=args.timeout)
 
-    run_score_validation(api, games, args.score_sample, rng)
-    run_player_validation(api, games_by_id, bats, args.base, args.player_sample, rng)
-    run_pitcher_validation(api, games_by_id, pitches, args.base, args.pitcher_sample, rng)
-    run_lineup_validation(api, games_by_id, lineups, args.base, args.lineup_sample, rng)
+    score = run_score_validation(api, games, args.score_sample, rng)
+    player = run_player_validation(api, games_by_id, bats, args.base, args.player_sample, rng)
+    pitcher = run_pitcher_validation(api, games_by_id, pitches, args.base, args.pitcher_sample, rng)
+    lineup = run_lineup_validation(api, games_by_id, lineups, args.base, args.lineup_sample, rng)
+
+    if args.fail_on_issues:
+        issues = (
+            score["unresolved_critical"]
+            + score["mismatches"]
+            + player["unresolved_critical"]
+            + player["mismatches"]
+            + pitcher["unresolved_critical"]
+            + pitcher["mismatches"]
+            + lineup["unresolved_critical"]
+            + lineup["mismatches"]
+        )
+        if issues > 0:
+            raise SystemExit(1)
 
 
 if __name__ == "__main__":

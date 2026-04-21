@@ -1,0 +1,30 @@
+$ /Users/douglastalbert/anaconda3/bin/python -m pipelines.scrape_boxscores --season 2005 --out data/raw --cache-html --resume --delay-seconds 3.2
+
+/Users/douglastalbert/anaconda3/lib/python3.10/site-packages/pandas/core/arrays/masked.py:61: UserWarning: Pandas requires version '1.3.6' or newer of 'bottleneck' (version '1.3.5' currently installed).
+  from pandas.core import (
+Found 2461 games in 2005 schedule
+Processed 100 games
+Processed 200 games
+Processed 300 games
+Processed 400 games
+Processed 500 games
+Processed 600 games
+Processed 700 games
+Processed 800 games
+Processed 900 games
+Processed 1000 games
+Processed 1100 games
+Processed 1200 games
+Processed 1300 games
+Processed 1400 games
+Processed 1500 games
+Processed 1600 games
+Processed 1700 games
+Processed 1800 games
+Processed 1900 games
+Processed 2000 games
+Processed 2100 games
+Processed 2200 games
+Processed 2300 games
+Processed 2400 games
+Done {'games': 2461, 'lineups': 44298, 'batting_lines': 69309, 'pitching_lines': 18267}
