@@ -33,6 +33,11 @@ def main() -> None:
         help="Base directory containing table/season=YYYY parquet partitions.",
     )
     parser.add_argument("--sample", type=int, default=5, help="Number of random games to print for spot checks.")
+    parser.add_argument(
+        "--fail-on-issues",
+        action="store_true",
+        help="Exit with status 1 when core validation checks find issues.",
+    )
     args = parser.parse_args()
 
     season_part = f"season={args.season}"
@@ -55,11 +60,10 @@ def main() -> None:
     print(con.execute("SELECT COUNT(*) AS pitching_lines FROM pitch").fetchdf())
 
     print("\n=== Game ID uniqueness ===")
-    print(
-        con.execute(
-            "SELECT COUNT(*) AS rows, COUNT(DISTINCT game_id) AS unique_ids FROM games"
-        ).fetchdf()
-    )
+    uniqueness_df = con.execute(
+        "SELECT COUNT(*) AS rows, COUNT(DISTINCT game_id) AS unique_ids FROM games"
+    ).fetchdf()
+    print(uniqueness_df)
 
     print("\n=== Lineup completeness (expect 0 bad_games) ===")
     bad_lineups = con.execute(
@@ -162,6 +166,17 @@ def main() -> None:
                 [gid],
             ).fetchdf()
         )
+
+    if args.fail_on_issues:
+        duplicate_games = int(uniqueness_df["rows"][0] - uniqueness_df["unique_ids"][0])
+        issues = (
+            duplicate_games
+            + int(bad_lineups["bad_games"][0])
+            + int(missing_bats["missing"][0])
+            + int(mismatches["mismatches"][0])
+        )
+        if issues > 0:
+            raise SystemExit(1)
 
 
 if __name__ == "__main__":

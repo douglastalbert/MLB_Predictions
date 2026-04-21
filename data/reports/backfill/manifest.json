@@ -1,0 +1,137 @@
+{
+  "config": {
+    "delay_seconds": 3.2,
+    "end_season": 2009,
+    "force_scrape": false,
+    "lineup_sample": 50,
+    "max_games": null,
+    "out": "data/raw",
+    "pitcher_sample": 50,
+    "player_sample": 50,
+    "reports_dir": "data/reports/backfill",
+    "run_seed": 2345449103,
+    "score_sample": 0,
+    "seed": null,
+    "seed_source": "generated",
+    "start_season": 2005,
+    "validation_workers": 5
+  },
+  "failed_seasons": [
+    2005
+  ],
+  "finished_at": "2026-04-21T12:24:01",
+  "overall_status": "failed",
+  "seasons": {
+    "2005": {
+      "scrape": {
+        "finished_at": "2026-04-21T12:22:12",
+        "return_code": 0,
+        "seconds": 0.0,
+        "status": "skipped_validate_only"
+      },
+      "validation": {
+        "external": {
+          "return_code": 1,
+          "seconds": 92.14,
+          "status": "failed"
+        },
+        "external_seed": 2345451108,
+        "internal": {
+          "return_code": 0,
+          "seconds": 2.17,
+          "status": "passed"
+        },
+        "status": "failed"
+      }
+    },
+    "2006": {
+      "scrape": {
+        "finished_at": "2026-04-21T12:22:12",
+        "return_code": 0,
+        "seconds": 0.0,
+        "status": "skipped_validate_only"
+      },
+      "validation": {
+        "external": {
+          "return_code": 0,
+          "seconds": 79.29,
+          "status": "passed"
+        },
+        "external_seed": 2345451109,
+        "internal": {
+          "return_code": 0,
+          "seconds": 2.17,
+          "status": "passed"
+        },
+        "status": "passed"
+      }
+    },
+    "2007": {
+      "scrape": {
+        "finished_at": "2026-04-21T12:22:12",
+        "return_code": 0,
+        "seconds": 0.0,
+        "status": "skipped_validate_only"
+      },
+      "validation": {
+        "external": {
+          "return_code": 0,
+          "seconds": 77.56,
+          "status": "passed"
+        },
+        "external_seed": 2345451110,
+        "internal": {
+          "return_code": 0,
+          "seconds": 2.17,
+          "status": "passed"
+        },
+        "status": "passed"
+      }
+    },
+    "2008": {
+      "scrape": {
+        "finished_at": "2026-04-21T12:22:12",
+        "return_code": 0,
+        "seconds": 0.0,
+        "status": "skipped_validate_only"
+      },
+      "validation": {
+        "external": {
+          "return_code": 0,
+          "seconds": 106.53,
+          "status": "passed"
+        },
+        "external_seed": 2345451111,
+        "internal": {
+          "return_code": 0,
+          "seconds": 2.16,
+          "status": "passed"
+        },
+        "status": "passed"
+      }
+    },
+    "2009": {
+      "scrape": {
+        "finished_at": "2026-04-21T12:22:12",
+        "return_code": 0,
+        "seconds": 0.0,
+        "status": "skipped_validate_only"
+      },
+      "validation": {
+        "external": {
+          "return_code": 0,
+          "seconds": 85.6,
+          "status": "passed"
+        },
+        "external_seed": 2345451112,
+        "internal": {
+          "return_code": 0,
+          "seconds": 2.16,
+          "status": "passed"
+        },
+        "status": "passed"
+      }
+    }
+  },
+  "started_at": "2026-04-21T12:22:12"
+}

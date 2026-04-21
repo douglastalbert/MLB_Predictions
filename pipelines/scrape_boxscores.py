@@ -40,6 +40,18 @@ def main() -> None:
     parser.add_argument("--no-cache-html", dest="cache_html", action="store_false")
     parser.add_argument("--resume", action="store_true", default=True, help="Skip already-downloaded games.")
     parser.add_argument("--force", action="store_true", help="Re-download and overwrite cached HTML.")
+    parser.add_argument(
+        "--delay-seconds",
+        type=float,
+        default=3.2,
+        help="Polite sleep between HTTP requests.",
+    )
+    parser.add_argument(
+        "--max-games",
+        type=int,
+        default=None,
+        help="Debug limiter. Omit for full-season completeness.",
+    )
     args = parser.parse_args()
 
     cfg = ScrapeConfig(
@@ -48,9 +60,18 @@ def main() -> None:
         cache_html=args.cache_html,
         resume=args.resume,
         force=args.force,
+        delay_seconds=args.delay_seconds,
+        max_games=args.max_games,
     )
     cfg.ensure_dirs()
     fetcher = Fetcher(cfg)
+    season_partition = f"season={cfg.season}"
+    html_dir = cfg.out_dir / "html" / season_partition
+    error_dir = cfg.out_dir / "errors" / season_partition
+    summary_dir = cfg.out_dir / "summaries"
+    html_dir.mkdir(parents=True, exist_ok=True)
+    error_dir.mkdir(parents=True, exist_ok=True)
+    summary_dir.mkdir(parents=True, exist_ok=True)
 
     schedule = fetch_schedule(cfg, fetcher)
     print(f"Found {len(schedule)} games in {cfg.season} schedule")
@@ -63,16 +84,14 @@ def main() -> None:
     for i, game in enumerate(schedule, start=1):
         if cfg.max_games and i > cfg.max_games:
             break
-        cache_path = cfg.out_dir / "html" / f"{game.game_id}.html"
+        cache_path = html_dir / f"{game.game_id}.html"
         try:
             if cache_path.exists() and cfg.resume and not cfg.force:
                 html = cache_path.read_text(encoding="utf-8")
             else:
                 html = fetcher.fetch(game.boxscore_url, cache_path=cache_path)
         except Exception as exc:  # noqa: BLE001
-            err_dir = cfg.out_dir / "errors"
-            err_dir.mkdir(parents=True, exist_ok=True)
-            (err_dir / f"{game.game_id}_fetch.txt").write_text(
+            (error_dir / f"{game.game_id}_fetch.txt").write_text(
                 f"{game.boxscore_url}\n{type(exc).__name__}: {exc}"
             )
             continue
@@ -80,9 +99,7 @@ def main() -> None:
         try:
             parsed = parse_boxscore(html)
         except Exception as exc:  # noqa: BLE001
-            err_dir = cfg.out_dir / "errors"
-            err_dir.mkdir(parents=True, exist_ok=True)
-            (err_dir / f"{game.game_id}_parse.txt").write_text(str(exc))
+            (error_dir / f"{game.game_id}_parse.txt").write_text(str(exc))
             continue
 
         games_rows.append(parsed.game)
@@ -93,7 +110,6 @@ def main() -> None:
         if i % 100 == 0:
             print(f"Processed {i} games")
 
-    season_partition = f"season={cfg.season}"
     write_parquet(games_rows, cfg.out_dir / "games" / season_partition / "part-0.parquet")
     write_parquet(lineup_rows, cfg.out_dir / "lineups" / season_partition / "part-0.parquet")
     write_parquet(bat_rows, cfg.out_dir / "player_batting_game" / season_partition / "part-0.parquet")
@@ -105,7 +121,7 @@ def main() -> None:
         "batting_lines": len(bat_rows),
         "pitching_lines": len(pitch_rows),
     }
-    (cfg.out_dir / f"summary_{cfg.season}.json").write_text(json.dumps(summary, indent=2))
+    (summary_dir / f"summary_{cfg.season}.json").write_text(json.dumps(summary, indent=2))
     print("Done", summary)
 
 
