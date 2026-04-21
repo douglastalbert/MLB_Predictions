@@ -186,7 +186,12 @@ def normalize_name(name: str) -> str:
     # Strip accents/diacritics so "Hector" and "Hector" with accents normalize identically.
     name = unicodedata.normalize("NFKD", name)
     name = "".join(ch for ch in name if not unicodedata.combining(ch))
-    return re.sub(r"[^a-z0-9]", "", name.lower())
+
+    # Ignore common generational suffixes in cross-source name matching.
+    tokens = re.findall(r"[a-z0-9]+", name.lower())
+    suffixes = {"jr", "sr", "ii", "iii", "iv", "v"}
+    tokens = [token for token in tokens if token not in suffixes]
+    return "".join(tokens)
 
 
 def load_games(base: Path, season: int) -> List[GameRow]:
