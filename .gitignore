@@ -1,0 +1,18 @@
+# OS/filesystem noise
+.DS_Store
+
+# Python/Jupyter caches
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Scraper artifacts (rebuildable, very large)
+data/raw/html/
+data/raw/errors/
+data/reports/
+
+# Keep scraped parquet data and code trackable
+!data/raw/games/**/*.parquet
+!data/raw/lineups/**/*.parquet
+!data/raw/player_batting_game/**/*.parquet
+!data/raw/player_pitching_game/**/*.parquet
